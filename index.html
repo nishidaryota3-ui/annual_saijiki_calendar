@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>年間歳時記・天体カレンダー (Annual Saijiki Celestial Calendar)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="canvas-container">
+        <svg id="annual-wheel-svg" viewBox="0 0 2000 2000">
+            <defs id="annual-defs"></defs>
+            <g id="annual-master-group"></g>
+            <g id="layer-annual-hands"></g>
+        </svg>
+    </div>
+
+    <!-- 設定・定数 -->
+    <script src="js/config/constants.js"></script>
+    <script src="js/config/default-settings.js"></script>
+
+    <!-- 歳時記・七十二候・二十四節気データベース -->
+    <script src="js/data/saijiki-database.js"></script>
+    <script src="js/data/user-events.js"></script>
+
+    <!-- 天体計算エンジン -->
+    <script src="js/astronomy/meeus.js"></script>
+    <script src="js/astronomy/ephemeris.js"></script>
+
+    <!-- SVG描画エンジン -->
+    <script src="js/draw/svg-utils.js"></script>
+    <script src="js/draw/draw-annual-wheel.js"></script>
+    <script src="js/draw/draw-annual-hands.js"></script>
+
+    <!-- UI & モーダル -->
+    <script src="js/ui/annual-navbar.js"></script>
+    <script src="js/ui/annual-modals.js"></script>
+    <script src="js/ui/design-panel.js"></script>
+
+    <!-- メイン統括 -->
+    <script src="main.js"></script>
+</body>
+</html>
