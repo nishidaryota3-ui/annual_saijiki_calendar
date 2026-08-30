@@ -14,6 +14,11 @@ const DEGREES_PER_DAY = 360.0 / 365.0; // 約0.9863度/日
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
 
+// 天文学定数 (ユリウス日・J2000.0・地球赤道傾斜角)
+const JD_UNIX_EPOCH = 2440587.5;
+const J2000_EPOCH_JD = 2451545.0;
+const EARTH_OBLIQUITY_DEG = 23.4397;
+
 // 同心円バンド半径定義 (Concentric Ring Bands)
 const ANNUAL_RINGS = {
     centerPivot:     25,
@@ -34,7 +39,7 @@ const ANNUAL_RINGS = {
 };
 
 const STORAGE_KEY_ANNUAL_SETTINGS = 'annualSaijikiSettingsV1';
-const STORAGE_KEY_ANNUAL_EVENTS = 'polarCalendarUserEventsV1'; // 観察記録データは共有
+const STORAGE_KEY_ANNUAL_EVENTS = 'polarCalendarUserEventsV1';
 
 window.cx = cx;
 window.cy = cy;
@@ -44,6 +49,11 @@ window.MS_PER_HOUR = MS_PER_HOUR;
 window.MS_PER_DAY = MS_PER_DAY;
 window.DAYS_IN_YEAR = DAYS_IN_YEAR;
 window.DEGREES_PER_DAY = DEGREES_PER_DAY;
+window.RAD_TO_DEG = RAD_TO_DEG;
+window.DEG_TO_RAD = DEG_TO_RAD;
+window.JD_UNIX_EPOCH = JD_UNIX_EPOCH;
+window.J2000_EPOCH_JD = J2000_EPOCH_JD;
+window.EARTH_OBLIQUITY_DEG = EARTH_OBLIQUITY_DEG;
 window.ANNUAL_RINGS = ANNUAL_RINGS;
 window.STORAGE_KEY_ANNUAL_SETTINGS = STORAGE_KEY_ANNUAL_SETTINGS;
 window.STORAGE_KEY_ANNUAL_EVENTS = STORAGE_KEY_ANNUAL_EVENTS;
