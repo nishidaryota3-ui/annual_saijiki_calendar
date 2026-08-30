@@ -1,6 +1,6 @@
 /**
  * 年間歳時記・天体カレンダー メインオーケストレーター (Main Orchestrator)
- * Figma / Google Maps ライクな極上マウス＆トラックパッド操作対応版
+ * マウス（物理マウス）＆トラックパッド 完全両対応版
  */
 
 window.currentAnnualDate = new Date(2026, 7, 29); // 2026年 8月29日
@@ -9,7 +9,7 @@ window.annualLayerSettings = JSON.parse(localStorage.getItem(STORAGE_KEY_ANNUAL_
 let viewBox = { x: 0, y: 0, w: 2000, h: 2000 };
 let isPanning = false;
 let startPoint = { x: 0, y: 0 };
-let hasDragged = false;
+window.hasDragged = false;
 
 const MIN_VIEWBOX_W = 35;   // 最大ズーム倍率（約5700%・ミクロ虫眼鏡モード）
 const MAX_VIEWBOX_W = 3600; // 最小ズーム倍率（広域全景モード）
@@ -31,7 +31,7 @@ function initAnnualApp() {
     drawAnnualClockHands(window.currentAnnualDate);
     updateAnnualNavDisplay(window.currentAnnualDate);
 
-    // パン＆ズーム インタラクション（極上操作感）
+    // パン＆ズーム インタラクション（マウス ＆ トラックパッド）
     setupPanAndZoom(svg);
 
     // ダブルクリックによる観察記録追加
@@ -67,18 +67,26 @@ function updateViewBoxAndLOD(svg) {
 function setupPanAndZoom(svg) {
     const container = document.getElementById("canvas-container");
 
-    // --- 1. マウスドラッグによるパン（平行移動） ---
-    container.addEventListener("mousedown", (e) => {
-        // UIコントロールやモーダル上のクリックは除外
-        if (e.target.closest("#annual-nav-bar") || e.target.closest("#annual-design-panel") || e.target.closest("#saijiki-modal-card") || e.target.closest("#annual-drawer") || e.target.closest("#zoom-control-widget") || e.target.closest("#print-export-modal")) return;
-        
-        if (e.button !== 0 && e.button !== 1) return; // 左クリック or 中クリック
+    // UI要素判定ヘルパー
+    function isUIElement(target) {
+        if (!target) return false;
+        return !!target.closest(
+            "#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, " +
+            "#annual-drawer, #zoom-control-widget, #print-export-modal, " +
+            "#annual-user-event-overlay"
+        );
+    }
+
+    // --- 1. マウス左ドラッグ / 中ボタンドラッグによるパン（掴み移動） ---
+    window.addEventListener("mousedown", (e) => {
+        if (isUIElement(e.target)) return;
+        if (e.button !== 0 && e.button !== 1) return; // 左クリック or ホイールクリック
 
         isPanning = true;
-        hasDragged = false;
+        window.hasDragged = false;
         startPoint = { x: e.clientX, y: e.clientY };
-        container.style.cursor = "grabbing";
-        e.preventDefault();
+        if (container) container.style.cursor = "grabbing";
+        document.body.style.cursor = "grabbing";
     });
 
     window.addEventListener("mousemove", (e) => {
@@ -88,7 +96,7 @@ function setupPanAndZoom(svg) {
         const deltaY = e.clientY - startPoint.y;
 
         if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
-            hasDragged = true;
+            window.hasDragged = true;
         }
 
         const svgRect = svg.getBoundingClientRect();
@@ -102,51 +110,56 @@ function setupPanAndZoom(svg) {
         startPoint = { x: e.clientX, y: e.clientY };
     });
 
-    window.addEventListener("mouseup", (e) => {
+    window.addEventListener("mouseup", () => {
         if (isPanning) {
             isPanning = false;
-            container.style.cursor = "grab";
+            if (container) container.style.cursor = "grab";
+            document.body.style.cursor = "default";
+            // ドラッグ終了後、微小な遅延で hasDragged をリセット
+            setTimeout(() => { window.hasDragged = false; }, 80);
         }
     });
 
-    // --- 2. マウスホイール ＆ トラックパッド操作 ---
-    container.addEventListener("wheel", (e) => {
+    // --- 2. マウスホイール ＆ トラックパッド ズーム（常に確実に動作） ---
+    window.addEventListener("wheel", (e) => {
+        if (isUIElement(e.target)) return;
         e.preventDefault();
 
-        // Macトラックパッドの2本指スクロール（パン移動）
-        if (!e.ctrlKey && !e.metaKey && (Math.abs(e.deltaX) > 0 || Math.abs(e.deltaY) < 40)) {
-            // トラックパッドによるスクロールパン移動
+        // 左右スクロールがある場合（トラックパッドの2本指パン移動）
+        if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaX) > 0 && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
             const svgRect = svg.getBoundingClientRect();
             const scaleX = viewBox.w / (svgRect.width || window.innerWidth);
-            const scaleY = viewBox.h / (svgRect.height || window.innerHeight);
-
             viewBox.x += e.deltaX * scaleX * 0.8;
-            viewBox.y += e.deltaY * scaleY * 0.8;
             updateViewBoxAndLOD(svg);
             return;
         }
 
-        // マウスホイールまたはピンチズームによる拡大縮小
+        // マウスホイール回転 または トラックパッドピンチ による拡大縮小
+        let delta = e.deltaY;
+        if (e.deltaMode === 1) delta *= 25; // 行単位スクロール
+        if (e.deltaMode === 2) delta *= 100; // ページ単位スクロール
+
         let zoomFactor;
         if (e.ctrlKey || e.metaKey) {
-            // ピンチズーム
-            zoomFactor = Math.exp(e.deltaY * 0.01);
+            // トラックパッドのピンチ操作
+            zoomFactor = Math.exp(delta * 0.008);
         } else {
-            // 通常のマウスホイール（しっかり気持ちよくズーム）
-            zoomFactor = e.deltaY > 0 ? 1.25 : 0.8;
+            // 物理マウスのホイール回転（上回転で拡大、下回転で縮小）
+            zoomFactor = delta > 0 ? 1.18 : 0.85;
         }
 
         applyZoom(zoomFactor, e.clientX, e.clientY);
     }, { passive: false });
 
-    // --- 3. タッチデバイス用 ピンチ＆パン ---
+    // --- 3. タッチデバイス ピンチ＆パン ---
     let initialTouchDist = null;
-    let initialTouchCenter = null;
 
-    container.addEventListener("touchstart", (e) => {
+    window.addEventListener("touchstart", (e) => {
+        if (isUIElement(e.target)) return;
+
         if (e.touches.length === 1) {
             isPanning = true;
-            hasDragged = false;
+            window.hasDragged = false;
             startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         } else if (e.touches.length === 2) {
             isPanning = false;
@@ -154,14 +167,12 @@ function setupPanAndZoom(svg) {
                 e.touches[0].clientX - e.touches[1].clientX,
                 e.touches[0].clientY - e.touches[1].clientY
             );
-            initialTouchCenter = {
-                x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-                y: (e.touches[0].clientY + e.touches[1].clientY) / 2
-            };
         }
     }, { passive: true });
 
-    container.addEventListener("touchmove", (e) => {
+    window.addEventListener("touchmove", (e) => {
+        if (isUIElement(e.target)) return;
+
         if (e.touches.length === 1 && isPanning) {
             const deltaX = e.touches[0].clientX - startPoint.x;
             const deltaY = e.touches[0].clientY - startPoint.y;
@@ -179,18 +190,17 @@ function setupPanAndZoom(svg) {
                 e.touches[0].clientY - e.touches[1].clientY
             );
             const factor = initialTouchDist / currentDist;
-            const center = {
-                x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
-                y: (e.touches[0].clientY + e.touches[1].clientY) / 2
-            };
-            applyZoom(factor, center.x, center.y);
+            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            applyZoom(factor, midX, midY);
             initialTouchDist = currentDist;
         }
     }, { passive: true });
 
-    container.addEventListener("touchend", () => {
+    window.addEventListener("touchend", () => {
         isPanning = false;
         initialTouchDist = null;
+        setTimeout(() => { window.hasDragged = false; }, 80);
     }, { passive: true });
 }
 
@@ -214,12 +224,15 @@ function applyZoom(zoomFactor, mouseX, mouseY) {
     const clientX = (mouseX !== undefined && mouseX !== null) ? mouseX : (svgRect.left + svgRect.width / 2);
     const clientY = (mouseY !== undefined && mouseY !== null) ? mouseY : (svgRect.top + svgRect.height / 2);
 
-    // マウス位置のSVG内相対座標を計算
-    const svgX = viewBox.x + ((clientX - svgRect.left) / svgRect.width) * viewBox.w;
-    const svgY = viewBox.y + ((clientY - svgRect.top) / svgRect.height) * viewBox.h;
+    // マウス位置を基準にviewBoxの原点を再計算（マウス位置がズレないズーム）
+    const ratioX = (clientX - svgRect.left) / (svgRect.width || 1);
+    const ratioY = (clientY - svgRect.top) / (svgRect.height || 1);
 
-    viewBox.x = svgX - ((clientX - svgRect.left) / svgRect.width) * newW;
-    viewBox.y = svgY - ((clientY - svgRect.top) / svgRect.height) * newH;
+    const svgX = viewBox.x + ratioX * viewBox.w;
+    const svgY = viewBox.y + ratioY * viewBox.h;
+
+    viewBox.x = svgX - ratioX * newW;
+    viewBox.y = svgY - ratioY * newH;
     viewBox.w = newW;
     viewBox.h = newH;
 
@@ -267,7 +280,7 @@ function initZoomControls() {
 
 function setupWheelInteractions(svg) {
     window.addEventListener("dblclick", (e) => {
-        if (e.target.closest("#annual-nav-bar") || e.target.closest("#annual-design-panel") || e.target.closest("#saijiki-modal-card") || e.target.closest("#annual-drawer") || e.target.closest("#zoom-control-widget") || e.target.closest("#print-export-modal")) return;
+        if (e.target.closest("#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, #annual-drawer, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay")) return;
 
         const pt = svg.createSVGPoint();
         pt.x = e.clientX;
