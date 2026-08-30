@@ -36,6 +36,8 @@ svg#annual-wheel-svg {
     max-width: 100vw;
     max-height: 100vh;
     touch-action: none;
+    shape-rendering: geometricPrecision;
+    text-rendering: geometricPrecision;
 }
 
 /* スクロールバーのカスタマイズ */
@@ -55,9 +57,75 @@ svg#annual-wheel-svg {
 
 /* ホバーハイライト */
 path:hover {
-    filter: brightness(1.2);
+    filter: brightness(1.25);
 }
 
 text {
     pointer-events: all;
+}
+
+/* LOD (Level of Detail) 階層表示制御 */
+.lod-macro {
+    transition: opacity 0.3s ease;
+}
+.lod-mid {
+    transition: opacity 0.3s ease;
+}
+.lod-micro {
+    transition: opacity 0.3s ease;
+}
+.lod-deep {
+    transition: opacity 0.3s ease;
+}
+
+/* 遠景時 (100%〜250%) */
+svg[data-lod="lod-macro"] .lod-micro,
+svg[data-lod="lod-macro"] .lod-deep {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+/* 中景時 (250%〜600%) */
+svg[data-lod="lod-mid"] .lod-deep {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+svg[data-lod="lod-mid"] .lod-micro {
+    opacity: 0.7;
+}
+
+/* 近景時 (600%〜1600%) */
+svg[data-lod="lod-micro"] .lod-micro {
+    opacity: 0.95;
+}
+svg[data-lod="lod-micro"] .lod-deep {
+    opacity: 0.35;
+}
+
+/* 極近景・ディープズーム時 (1600%〜5000%) */
+svg[data-lod="lod-deep"] .lod-micro {
+    opacity: 1;
+}
+svg[data-lod="lod-deep"] .lod-deep {
+    opacity: 1 !important;
+    pointer-events: all;
+}
+
+/* 印刷用メディアクエリ */
+@media print {
+    #annual-nav-bar,
+    #zoom-control-widget,
+    #annual-design-panel,
+    #saijiki-modal-overlay,
+    #annual-user-event-overlay,
+    #annual-drawer,
+    #print-export-modal {
+        display: none !important;
+    }
+    body, html, #canvas-container {
+        width: 100%;
+        height: 100%;
+        background: #fff !important;
+        color: #000 !important;
+    }
 }

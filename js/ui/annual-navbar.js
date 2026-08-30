@@ -45,13 +45,14 @@ function initAnnualNavBar() {
 
             <button id="btn-next-day" style="background:transparent; border:1px solid rgba(212,175,55,0.4); color:#d4af37; width:26px; height:26px; border-radius:4px; cursor:pointer; display:flex; justify-content:center; align-items:center; font-size:11px;" title="1日進む">▶</button>
             
-            <button id="btn-annual-today" style="background:rgba(212,175,55,0.15); border:1px solid #d4af37; color:#d4af37; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer; height:26px;">今日</button>
+            <button id="btn-annual-today" style="background:rgba(212,175,55,0.15); border:1px solid #d4af37; color:#d4af37; padding:3px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:height:26px;">今日</button>
         </div>
 
         <!-- アニメーション & 機能ボタン -->
         <div style="display:flex; align-items:center; gap:8px; border-left:1px solid rgba(255,255,255,0.15); padding-left:12px;">
             <button id="btn-annual-play" style="background:rgba(56,189,248,0.15); border:1px solid #38bdf8; color:#38bdf8; padding:4px 10px; border-radius:5px; font-size:11px; font-weight:500; cursor:pointer;" title="1年の時間の流れを再生">▶ 時間の旅</button>
             <button id="btn-annual-observations" style="background:rgba(212,175,55,0.12); border:1px solid rgba(212,175,55,0.4); color:#d4af37; padding:4px 10px; border-radius:5px; font-size:11px; font-weight:500; cursor:pointer;">観察記録</button>
+            <button id="btn-print-export" style="background:rgba(212,175,55,0.2); border:1px solid #d4af37; color:#fde047; padding:4px 10px; border-radius:5px; font-size:11px; font-weight:bold; cursor:pointer;" title="A0/A1高機能印刷用ベクターを出力">🖨️ A0印刷</button>
             <button id="btn-annual-settings" style="background:transparent; border:1px solid #475569; color:#cbd5e1; padding:4px 8px; border-radius:5px; font-size:11px; cursor:pointer;" title="デザイン・レイヤー設定">⚙️</button>
         </div>
 
@@ -66,6 +67,7 @@ function initAnnualNavBar() {
     document.getElementById('btn-next-day').onclick = () => window.stepAnnualDate(1);
     document.getElementById('btn-annual-today').onclick = () => window.resetToToday();
     document.getElementById('btn-annual-observations').onclick = () => window.toggleObservationDrawer();
+    document.getElementById('btn-print-export').onclick = () => window.openPrintExportModal();
     document.getElementById('btn-annual-settings').onclick = () => window.toggleDesignPanel();
 
     document.querySelectorAll('.season-jump-btn').forEach(btn => {

@@ -1,5 +1,6 @@
 /**
  * 歳時記・七十二候・観察記録モーダル ＆ タイムラインドロワー
+ * 21,372語 完全歳時記データベース連携対応
  */
 
 (function() {
@@ -10,7 +11,7 @@
         display: none;
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.65);
+        background: rgba(0, 0, 0, 0.7);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
         z-index: 2500;
@@ -24,8 +25,10 @@
             background: #0f172a;
             border: 1px solid rgba(212, 175, 55, 0.4);
             border-radius: 16px;
-            width: 440px;
+            width: 480px;
             max-width: 90vw;
+            max-height: 88vh;
+            overflow-y: auto;
             padding: 24px;
             color: #f1f5f9;
             box-shadow: 0 20px 50px rgba(0,0,0,0.8);
@@ -43,6 +46,13 @@
             <div style="margin-bottom:14px;">
                 <div style="font-size:11px; color:#d4af37; margin-bottom:4px; font-weight:bold;">🌿 代表季語・風物詩</div>
                 <div id="sm-kigo" style="font-size:13px; color:#e2e8f0;">東風、解氷、薄氷</div>
+            </div>
+
+            <!-- 21,372語DBから抽出される関連季語リスト -->
+            <div style="margin-bottom:14px;">
+                <div style="font-size:11px; color:#d4af37; margin-bottom:6px; font-weight:bold;">📚 この時期の歳時記（季語データベース）</div>
+                <div id="sm-db-kigo-list" style="display:flex; flex-wrap:wrap; gap:5px; max-height:120px; overflow-y:auto; padding:6px; background:rgba(0,0,0,0.25); border-radius:6px; border:1px solid #334155;">
+                </div>
             </div>
 
             <div style="background:rgba(212,175,55,0.08); border-left:3px solid #d4af37; padding:10px 14px; border-radius:4px; margin-bottom:18px;">
@@ -69,9 +79,37 @@
         document.getElementById('sm-kigo').innerText = kou.kigo || '季節の草木・風';
         document.getElementById('sm-haiku').innerText = kou.haiku || '（季の句）';
 
+        // 21,372語DBからの季語抽出
+        const dbList = document.getElementById('sm-db-kigo-list');
+        dbList.innerHTML = '';
+        if (window.getKigoByDetailSeason) {
+            // 例: 春の初春・仲春・晩春をマッピング
+            let ds = '三春';
+            if (kou.id <= 6) ds = '初春';
+            else if (kou.id <= 12) ds = '仲春';
+            else if (kou.id <= 18) ds = '晩春';
+            else if (kou.id <= 24) ds = '初夏';
+            else if (kou.id <= 30) ds = '仲夏';
+            else if (kou.id <= 36) ds = '晩夏';
+            else if (kou.id <= 42) ds = '初秋';
+            else if (kou.id <= 48) ds = '仲秋';
+            else if (kou.id <= 54) ds = '晩秋';
+            else if (kou.id <= 60) ds = '初冬';
+            else if (kou.id <= 66) ds = '仲冬';
+            else ds = '晩冬';
+
+            const kigoItems = window.getKigoByDetailSeason(ds, null, 24);
+            if (kigoItems.length > 0) {
+                dbList.innerHTML = kigoItems.map(item => {
+                    return `<span style="background:rgba(212,175,55,0.15); border:1px solid rgba(212,175,55,0.3); color:#fef08a; padding:2px 6px; border-radius:4px; font-size:11px; cursor:help;" title="${item.reading} ｜ ${item.category} ｜ ${item.desc || ''}">${item.parent}</span>`;
+                }).join('');
+            } else {
+                dbList.innerHTML = `<span style="color:#64748b; font-size:11px;">季語データを読み込み中...</span>`;
+            }
+        }
+
         document.getElementById('sm-add-diary-btn').onclick = () => {
             saijikiOverlay.style.display = 'none';
-            // 現在の選択日に記録をつける
             const date = window.currentAnnualDate || new Date();
             const y = date.getFullYear();
             const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -90,6 +128,18 @@
         document.getElementById('sm-desc').innerText = term.desc;
         document.getElementById('sm-kigo').innerText = `目安時期: ${term.approxDate} 頃`;
         document.getElementById('sm-haiku').innerText = `【${term.name}】の風物詩と自然の移ろい`;
+
+        const dbList = document.getElementById('sm-db-kigo-list');
+        dbList.innerHTML = '';
+        if (window.searchSaijiki) {
+            const results = window.searchSaijiki(term.name, 15);
+            if (results.length > 0) {
+                dbList.innerHTML = results.map(item => {
+                    return `<span style="background:rgba(212,175,55,0.15); border:1px solid rgba(212,175,55,0.3); color:#fef08a; padding:2px 6px; border-radius:4px; font-size:11px; cursor:help;" title="${item.reading} ｜ ${item.desc || ''}">${item.parent}</span>`;
+                }).join('');
+            }
+        }
+
         saijikiOverlay.style.display = 'flex';
     };
 

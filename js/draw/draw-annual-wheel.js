@@ -1,5 +1,6 @@
 /**
  * 365日・年間歳時記ホイール描画エンジン (Annual Saijiki Wheel Drawing Engine)
+ * A0超高精細ディープズーム ＆ LOD（Level of Detail）対応
  */
 
 function dateToDayOfYear(date) {
@@ -68,7 +69,7 @@ function drawAnnualWheel(year = 2026) {
  * 1. 同心円ベースグリッド
  */
 function drawAnnualBaseGrid(parent) {
-    const g = createSVGElem("g", { id: "layer-annual-grid", opacity: 0.6 });
+    const g = createSVGElem("g", { id: "layer-annual-grid", class: "lod-macro", opacity: 0.6 });
     const R = ANNUAL_RINGS;
 
     // 各バンドの境界円
@@ -93,7 +94,7 @@ function drawAnnualBaseGrid(parent) {
  * 2. 四季バンド (春・夏・秋・冬)
  */
 function drawSeasonsBand(parent, defs) {
-    const g = createSVGElem("g", { id: "layer-seasons" });
+    const g = createSVGElem("g", { id: "layer-seasons", class: "lod-macro" });
     const st = getLayerStyle('seasons');
     const R = ANNUAL_RINGS;
     const rIn = R.seasonsInner, rOut = R.seasonsOuter;
@@ -149,7 +150,7 @@ function drawSeasonsBand(parent, defs) {
  * 3. 二十四節気バンド (24等分)
  */
 function drawSekki24Band(parent, defs) {
-    const g = createSVGElem("g", { id: "layer-sekki24" });
+    const g = createSVGElem("g", { id: "layer-sekki24", class: "lod-macro" });
     const st = getLayerStyle('sekki24');
     const R = ANNUAL_RINGS;
     const rIn = R.sekki24Inner, rOut = R.sekki24Outer;
@@ -159,7 +160,6 @@ function drawSekki24Band(parent, defs) {
     const degPerTerm = 360 / 24; // 15度
 
     terms.forEach((term, idx) => {
-        // 立春 (idx:0) は約35日目 (34.5度)
         const startAng = (34.5 + idx * degPerTerm) % 360;
         const endAng = (startAng + degPerTerm) % 360;
 
@@ -192,7 +192,7 @@ function drawSekki24Band(parent, defs) {
             fill: st.color || "#e2e8f0",
             "font-size": `${st.fontSize || 16}px`,
             "font-family": st.fontFamily || "'Shippori Mincho', serif",
-            "font-weight": (idx % 6 === 0) ? "bold" : "normal", // 四季の起点（立春・立夏・立秋・立冬）を太字
+            "font-weight": (idx % 6 === 0) ? "bold" : "normal",
             opacity: st.opacity,
             style: "cursor: pointer;"
         });
@@ -206,6 +206,21 @@ function drawSekki24Band(parent, defs) {
 
         textElem.appendChild(textPath);
         g.appendChild(textElem);
+
+        // ディープズーム時に表示される太陽黄経度数（例: 315°）
+        const midAng = (startAng + degPerTerm / 2) % 360;
+        const ptDeg = polarToCartesian(cx, cy, rIn + 16, midAng);
+        const degText = createSVGElem("text", {
+            x: ptDeg.x, y: ptDeg.y,
+            fill: "#d4af37",
+            "font-size": "8px",
+            "font-family": "'Cinzel', serif",
+            "text-anchor": "middle",
+            "dominant-baseline": "central",
+            transform: `rotate(${midAng}, ${ptDeg.x}, ${ptDeg.y})`,
+            class: "lod-deep"
+        }, `${term.solarLong}°`);
+        g.appendChild(degText);
     });
 
     parent.appendChild(g);
@@ -219,7 +234,8 @@ function drawKou72Band(parent, defs) {
     const st = getLayerStyle('kou72');
     const R = ANNUAL_RINGS;
     const rIn = R.kou72Inner, rOut = R.kou72Outer;
-    const rText = (rIn + rOut) / 2;
+    const rText = (rIn + rOut) / 2 + 10;
+    const rSub = rIn + 22;
 
     const microSeasons = window.MICRO_SEASONS_72 || [];
     const degPerKou = 360 / 72; // 5度
@@ -246,13 +262,14 @@ function drawKou72Band(parent, defs) {
         g.appendChild(createSVGElem("line", {
             x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
             stroke: st.dividerColor || "rgba(255, 255, 255, 0.15)",
-            "stroke-width": (idx % 3 === 0) ? 0.8 : 0.4
+            "stroke-width": (idx % 3 === 0) ? 0.8 : 0.4,
+            class: "lod-macro"
         }));
 
-        // 半径方向に沿った縦書き配置
         const midAng = (startAng + degPerKou / 2) % 360;
-        const pt = polarToCartesian(cx, cy, rText, midAng);
 
+        // 1. 七十二候 名称（中景以上で鮮明に表示）
+        const pt = polarToCartesian(cx, cy, rText, midAng);
         const text = createStyledText(st, {
             x: pt.x, y: pt.y,
             fill: st.color || "#cbd5e1",
@@ -262,10 +279,25 @@ function drawKou72Band(parent, defs) {
             "dominant-baseline": "central",
             transform: `rotate(${midAng}, ${pt.x}, ${pt.y})`,
             style: "cursor: pointer;",
+            class: "lod-mid",
             opacity: st.opacity
         }, kou.name);
         text.onclick = () => window.openKouDetailModal(kou);
         g.appendChild(text);
+
+        // 2. ディープズーム用：ふりがな・候番号
+        const ptReading = polarToCartesian(cx, cy, rSub, midAng);
+        const readingText = createSVGElem("text", {
+            x: ptReading.x, y: ptReading.y,
+            fill: "#94a3b8",
+            "font-size": "6.5px",
+            "font-family": "'Shippori Mincho', serif",
+            "text-anchor": "middle",
+            "dominant-baseline": "central",
+            transform: `rotate(${midAng}, ${ptReading.x}, ${ptReading.y})`,
+            class: "lod-deep"
+        }, kou.reading);
+        g.appendChild(readingText);
     });
 
     parent.appendChild(g);
@@ -299,6 +331,7 @@ function drawDateGridBand(parent, defs, year) {
             x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y,
             stroke: st.monthDividerColor || "#d4af37",
             "stroke-width": 1.5,
+            class: "lod-macro",
             opacity: st.opacity
         }));
 
@@ -310,6 +343,7 @@ function drawDateGridBand(parent, defs, year) {
             "font-size": `${st.monthFontSize || 13}px`,
             "font-family": st.fontFamily || "'Cinzel', serif",
             "font-weight": "bold",
+            class: "lod-macro",
             opacity: st.opacity
         });
         const mPath = createSVGElem("textPath", {
@@ -326,29 +360,31 @@ function drawDateGridBand(parent, defs, year) {
             const dayAng = (currentDayOfYear / 365) * 360;
 
             const isMajor = (d === 1 || d === 10 || d === 20 || d === daysInMonth);
-            const tickLen = isMajor ? 12 : 5;
+            const tickLen = isMajor ? 12 : (d % 5 === 0 ? 8 : 4);
             const tp1 = polarToCartesian(cx, cy, rOut, dayAng);
             const tp2 = polarToCartesian(cx, cy, rOut - tickLen, dayAng);
 
             g.appendChild(createSVGElem("line", {
                 x1: tp1.x, y1: tp1.y, x2: tp2.x, y2: tp2.y,
                 stroke: isMajor ? "#d4af37" : (st.tickColor || "rgba(255,255,255,0.2)"),
-                "stroke-width": isMajor ? 1.0 : 0.5
+                "stroke-width": isMajor ? 1.0 : 0.4,
+                class: isMajor ? "lod-macro" : (d % 5 === 0 ? "lod-mid" : "lod-micro")
             }));
 
-            if (isMajor || d % 5 === 0) {
-                const ptNum = polarToCartesian(cx, cy, rDate, dayAng);
-                const numText = createSVGElem("text", {
-                    x: ptNum.x, y: ptNum.y,
-                    fill: isMajor ? "#e2e8f0" : "#94a3b8",
-                    "font-size": `${st.fontSize || 9}px`,
-                    "font-family": "'Cinzel', sans-serif",
-                    "text-anchor": "middle",
-                    "dominant-baseline": "central",
-                    transform: `rotate(${dayAng}, ${ptNum.x}, ${ptNum.y})`
-                }, String(d));
-                g.appendChild(numText);
-            }
+            const ptNum = polarToCartesian(cx, cy, rDate, dayAng);
+            const numClass = isMajor ? "lod-macro" : (d % 5 === 0 ? "lod-mid" : "lod-deep");
+
+            const numText = createSVGElem("text", {
+                x: ptNum.x, y: ptNum.y,
+                fill: isMajor ? "#e2e8f0" : "#94a3b8",
+                "font-size": `${isMajor ? (st.fontSize || 9) : 7}px`,
+                "font-family": "'Cinzel', sans-serif",
+                "text-anchor": "middle",
+                "dominant-baseline": "central",
+                transform: `rotate(${dayAng}, ${ptNum.x}, ${ptNum.y})`,
+                class: numClass
+            }, String(d));
+            g.appendChild(numText);
         }
 
         dayAccum += daysInMonth;
@@ -358,14 +394,15 @@ function drawDateGridBand(parent, defs, year) {
 }
 
 /**
- * 6. 歳時記・季語・風物詩バンド
+ * 6. 歳時記・季語・代表俳句バンド
  */
 function drawSaijikiBand(parent, defs) {
     const g = createSVGElem("g", { id: "layer-saijiki" });
     const st = getLayerStyle('saijiki');
     const R = ANNUAL_RINGS;
     const rIn = R.saijikiInner, rOut = R.saijikiOuter;
-    const rText = (rIn + rOut) / 2;
+    const rText = (rIn + rOut) / 2 + 12;
+    const rSub = rIn + 25;
 
     const microSeasons = window.MICRO_SEASONS_72 || [];
     const degPerKou = 360 / 72;
@@ -373,7 +410,9 @@ function drawSaijikiBand(parent, defs) {
     microSeasons.forEach((kou, idx) => {
         const startAng = (34.5 + idx * degPerKou) % 360;
         const endAng = (startAng + degPerKou) % 360;
+        const midAng = (startAng + degPerKou / 2) % 360;
 
+        // 代表季語（中景〜）
         const arcId = `arc_saijiki_${idx}`;
         createTextArc(defs, arcId, rText, startAng + 0.5, endAng - 0.5);
 
@@ -381,6 +420,7 @@ function drawSaijikiBand(parent, defs) {
             fill: st.color || "#d4af37",
             "font-size": `${st.fontSize || 11}px`,
             "font-family": st.fontFamily || "'Shippori Mincho', serif",
+            class: "lod-mid",
             opacity: st.opacity,
             style: "cursor: pointer;"
         });
@@ -390,10 +430,25 @@ function drawSaijikiBand(parent, defs) {
             href: `#${arcId}`,
             startOffset: "50%",
             "text-anchor": "middle"
-        }, kou.kigo.split('・')[0]); // 主代表季語
+        }, kou.kigo.split('・')[0]);
 
         textElem.appendChild(textPath);
         g.appendChild(textElem);
+
+        // ディープズーム用：子季語・副季語
+        const ptSub = polarToCartesian(cx, cy, rSub, midAng);
+        const subKigoStr = kou.kigo.split('・').slice(1).join(' / ') || '風情';
+        const subText = createSVGElem("text", {
+            x: ptSub.x, y: ptSub.y,
+            fill: "#cbd5e1",
+            "font-size": "6.5px",
+            "font-family": "'Shippori Mincho', serif",
+            "text-anchor": "middle",
+            "dominant-baseline": "central",
+            transform: `rotate(${midAng}, ${ptSub.x}, ${ptSub.y})`,
+            class: "lod-deep"
+        }, subKigoStr);
+        g.appendChild(subText);
     });
 
     parent.appendChild(g);
@@ -403,17 +458,17 @@ function drawSaijikiBand(parent, defs) {
  * 7. 二十七宿バンド (27等分)
  */
 function drawAnnualMansionsBand(parent, defs) {
-    const g = createSVGElem("g", { id: "layer-mansions27" });
+    const g = createSVGElem("g", { id: "layer-mansions27", class: "lod-mid" });
     const st = getLayerStyle('lunarMansion');
     const R = ANNUAL_RINGS;
     const rIn = R.mansions27Inner, rOut = R.mansions27Outer;
     const rText = (rIn + rOut) / 2;
 
     const mansions = [
-        "角", "亢", "氐", "房", "心", "尾", "箕", // 東方青龍
-        "斗", "牛", "女", "虚", "危", "室", "壁", // 北方玄武 (28宿の牛含む)
-        "奎", "婁", "胃", "昴", "畢", "觜", "参", // 西方白虎
-        "井", "鬼", "柳", "星", "張", "翼", "軫"  // 南方朱雀
+        "角", "亢", "氐", "房", "心", "尾", "箕",
+        "斗", "牛", "女", "虚", "危", "室", "壁",
+        "奎", "婁", "胃", "昴", "畢", "觜", "参",
+        "井", "鬼", "柳", "星", "張", "翼", "軫"
     ];
 
     const degPerMansion = 360 / 27;
@@ -452,19 +507,19 @@ function drawAnnualMansionsBand(parent, defs) {
  * 8. 黄道十二星座バンド (12等分)
  */
 function drawAnnualZodiacBand(parent, defs) {
-    const g = createSVGElem("g", { id: "layer-zodiac12" });
+    const g = createSVGElem("g", { id: "layer-zodiac12", class: "lod-macro" });
     const st = getLayerStyle('zodiacRing');
     const R = ANNUAL_RINGS;
     const rIn = R.zodiac12Inner, rOut = R.zodiac12Outer;
     const rText = (rIn + rOut) / 2;
 
-    const signs = window.ZODIAC_SIGNS_12 || [];
-    const degPerSign = 360 / 12; // 30度
+    const zodiacs = window.ZODIAC_SIGNS_12 || [];
+    const degPerZodiac = 360 / 12; // 30度
 
-    signs.forEach((sign, i) => {
-        // 春分 (約3/20 / 79日目 / 78度) を起点として牡羊座 (0度) を配置
-        const startAng = (78 + i * degPerSign) % 360;
-        const endAng = (startAng + degPerSign) % 360;
+    zodiacs.forEach((z, idx) => {
+        // 春分（0度）から開始
+        const startAng = (z.startDeg + 79) % 360; // 3/20春分 (79日目)
+        const endAng = (startAng + degPerZodiac) % 360;
 
         const p1 = polarToCartesian(cx, cy, rIn, startAng);
         const p2 = polarToCartesian(cx, cy, rOut, startAng);
@@ -474,18 +529,20 @@ function drawAnnualZodiacBand(parent, defs) {
             "stroke-width": st.dividerWidth || 1.0
         }));
 
-        const midAng = (startAng + degPerSign / 2) % 360;
+        const midAng = (startAng + degPerZodiac / 2) % 360;
         const pt = polarToCartesian(cx, cy, rText, midAng);
+
         const text = createStyledText(st, {
             x: pt.x, y: pt.y,
             fill: st.color || "#d4af37",
             "font-size": `${st.fontSize || 18}px`,
             "font-family": st.fontFamily || "'Cinzel', serif",
+            "font-weight": "bold",
             "text-anchor": "middle",
             "dominant-baseline": "central",
             transform: `rotate(${midAng}, ${pt.x}, ${pt.y})`,
             opacity: st.opacity
-        }, `${sign.symbol} ${sign.jp}`);
+        }, z.symbol);
         g.appendChild(text);
     });
 
@@ -493,54 +550,49 @@ function drawAnnualZodiacBand(parent, defs) {
 }
 
 /**
- * 9. ユーザーの年間観察記録プロット
+ * 9. ユーザーの年間観察記録
  */
 function drawAnnualUserEvents(parent, year) {
-    const g = createSVGElem("g", { id: "layer-annual-user-events" });
+    const g = createSVGElem("g", { id: "layer-user-events" });
     const st = getLayerStyle('userEvents');
-    const R = ANNUAL_RINGS;
-    const rIn = R.kou72Inner, rOut = R.saijikiOuter;
-    const rDot = R.dateGridInner - 8;
+    if (!st || st.opacity === 0) return;
 
     const db = window.loadAllUserEvents ? window.loadAllUserEvents() : {};
     const categories = window.USER_EVENT_CATEGORIES || {};
 
+    const R = ANNUAL_RINGS;
+    const rDot = R.dateGridOuter + 14;
+
     Object.keys(db).forEach(dateKey => {
-        if (!dateKey.startsWith(String(year))) return;
-        const events = db[dateKey];
-        if (!events || events.length === 0) return;
-
         const [y, m, dt] = dateKey.split('-').map(Number);
-        const dateObj = new Date(y, m - 1, dt);
-        const angle = dateToAnnualAngle(dateObj);
+        if (y !== year) return;
 
-        const firstEv = events[0];
-        const cat = categories[firstEv.category] || { color: "#d4af37" };
+        const date = new Date(y, m - 1, dt);
+        const doy = dateToDayOfYear(date);
+        const ang = (doy / 365) * 360;
 
-        // 1. 扇形光彩ハイライト
-        const d = getSectorPathD(rIn, rOut, angle - 0.6, angle + 0.6);
-        const wash = createSVGElem("path", {
-            d: d,
-            fill: cat.color,
-            opacity: st.sectorWashOpacity || 0.25,
-            style: "cursor: pointer;"
-        });
-        wash.onclick = () => window.openUserEventModal(dateKey, firstEv.id);
-        wash.appendChild(createSVGElem("title", {}, `${m}月${dt}日:\n${events.map(e => `・${e.text}`).join('\n')}`));
-        g.appendChild(wash);
+        const events = db[dateKey] || [];
+        if (events.length === 0) return;
 
-        // 2. 光点ジュエルピン
-        const pt = polarToCartesian(cx, cy, rDot, angle);
+        const ev = events[0]; // 最初の記録
+        const cat = categories[ev.category] || { color: "#d4af37", name: "記録" };
+
+        const pt = polarToCartesian(cx, cy, rDot, ang);
+
+        // 記録マーカードット
         const dot = createSVGElem("circle", {
-            cx: pt.x, cy: pt.y, r: 3.5,
+            cx: pt.x, cy: pt.y, r: 4,
             fill: cat.color,
-            stroke: "#ffffff",
-            "stroke-width": 0.8,
-            style: "cursor: pointer;"
+            stroke: "#0f172a",
+            "stroke-width": 1.2,
+            style: "cursor: pointer; filter: drop-shadow(0 0 4px " + cat.color + ");"
         });
-        dot.onclick = () => window.openUserEventModal(dateKey, firstEv.id);
+        dot.onclick = () => window.openUserEventModal(dateKey, ev.id);
+        dot.appendChild(createSVGElem("title", {}, `【${dateKey} 観察記録】\n${cat.name}: ${ev.text}`));
         g.appendChild(dot);
     });
 
     parent.appendChild(g);
 }
+
+window.drawAnnualWheel = drawAnnualWheel;
