@@ -1,52 +1,27 @@
 /**
  * 年間歳時記・天体カレンダー メインオーケストレーター (Main Orchestrator)
- * マウス（物理マウス）＆トラックパッド 完全両対応版
+ * V4カレンダーで実績のあるSVG座標変換マトリクス方式による完全パン＆ズーム
  */
 
 window.currentAnnualDate = new Date(2026, 7, 29); // 2026年 8月29日
 window.annualLayerSettings = JSON.parse(localStorage.getItem(STORAGE_KEY_ANNUAL_SETTINGS)) || window.defaultAnnualSettings;
 
 let viewBox = { x: 0, y: 0, w: 2000, h: 2000 };
-let isPanning = false;
-let startPoint = { x: 0, y: 0 };
+window.viewBox = viewBox;
 window.hasDragged = false;
 
-const MIN_VIEWBOX_W = 35;   // 最大ズーム倍率（約5700%・ミクロ虫眼鏡モード）
-const MAX_VIEWBOX_W = 3600; // 最小ズーム倍率（広域全景モード）
+let isInteractionActive = false;
+let startPos = { x: 0, y: 0 };
+let dragDistance = 0;
 
-function initAnnualApp() {
-    const svg = document.getElementById("annual-wheel-svg");
-    if (!svg) return;
+const MIN_VIEWBOX_W = 35;   // 最大ズーム（約5700%・虫眼鏡モード）
+const MAX_VIEWBOX_W = 3600; // 最小ズーム（広域全景モード）
 
-    updateViewBoxAndLOD(svg);
-
-    // ナビゲーションバー初期化
-    initAnnualNavBar();
-
-    // ズームインジケーター ＆ コントローラー初期化
-    initZoomControls();
-
-    // 初回描画
-    drawAnnualWheel(window.currentAnnualDate.getFullYear());
-    drawAnnualClockHands(window.currentAnnualDate);
-    updateAnnualNavDisplay(window.currentAnnualDate);
-
-    // パン＆ズーム インタラクション（マウス ＆ トラックパッド）
-    setupPanAndZoom(svg);
-
-    // ダブルクリックによる観察記録追加
-    setupWheelInteractions(svg);
-}
-
-function updateViewBoxAndLOD(svg) {
+function updateLOD(svg) {
     if (!svg) svg = document.getElementById("annual-wheel-svg");
     if (!svg) return;
 
-    svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
-
-    // LOD判定 (Level of Detail: 遠景・中景・近景・極近景)
     const zoomRatio = Math.round((2000 / viewBox.w) * 100);
-    
     let lodClass = "lod-macro";
     if (viewBox.w <= 900 && viewBox.w > 350) {
         lodClass = "lod-mid";
@@ -64,179 +39,162 @@ function updateViewBoxAndLOD(svg) {
     }
 }
 
-function setupPanAndZoom(svg) {
-    const container = document.getElementById("canvas-container");
+function initAnnualApp() {
+    const svg = document.getElementById("annual-wheel-svg");
+    if (!svg) return;
+    window.svg = svg;
 
-    // UI要素判定ヘルパー
-    function isUIElement(target) {
-        if (!target) return false;
-        return !!target.closest(
-            "#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, " +
-            "#annual-drawer, #zoom-control-widget, #print-export-modal, " +
-            "#annual-user-event-overlay"
-        );
-    }
+    svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+    updateLOD(svg);
 
-    // --- 1. マウス左ドラッグ / 中ボタンドラッグによるパン（掴み移動） ---
-    window.addEventListener("mousedown", (e) => {
-        if (isUIElement(e.target)) return;
-        if (e.button !== 0 && e.button !== 1) return; // 左クリック or ホイールクリック
+    // ナビゲーションバー初期化
+    initAnnualNavBar();
 
-        isPanning = true;
+    // ズームインジケーター ＆ コントローラー初期化
+    initZoomControls();
+
+    // 初回描画
+    drawAnnualWheel(window.currentAnnualDate.getFullYear());
+    drawAnnualClockHands(window.currentAnnualDate);
+    updateAnnualNavDisplay(window.currentAnnualDate);
+
+    // V4実績ベースのパン＆ズーム初期化
+    initInteractions();
+
+    // UIパネルへのイベントバブリング防止
+    setupUIEventBlockers();
+}
+
+function initInteractions() {
+    const appContainer = document.getElementById("canvas-container") || document.body;
+    const svg = document.getElementById("annual-wheel-svg");
+
+    // --- 1. ホイールズーム (V4と全く同一のSVGマトリクス計算) ---
+    appContainer.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        if (!svg) return;
+
+        // ホイールの回転方向に応じて拡大・縮小
+        const zoomFactor = e.deltaY > 0 ? 1.08 : 0.92;
+        const newW = viewBox.w * zoomFactor;
+        const newH = viewBox.h * zoomFactor;
+
+        if (newW < MIN_VIEWBOX_W || newW > MAX_VIEWBOX_W) return;
+
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+        viewBox.w = newW;
+        viewBox.h = newH;
+        viewBox.x = svgP.x - (svgP.x - viewBox.x) * zoomFactor;
+        viewBox.y = svgP.y - (svgP.y - viewBox.y) * zoomFactor;
+
+        svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+        updateLOD(svg);
+    }, { passive: false });
+
+    // --- 2. マウスドラッグによるパン (V4と全く同一の実装) ---
+    appContainer.addEventListener('mousedown', (e) => {
+        if (e.target.closest('#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, #annual-drawer, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay')) return;
+        
+        dragDistance = 0;
+        isInteractionActive = true;
         window.hasDragged = false;
-        startPoint = { x: e.clientX, y: e.clientY };
-        if (container) container.style.cursor = "grabbing";
-        document.body.style.cursor = "grabbing";
+        startPos = { x: e.clientX, y: e.clientY };
+        appContainer.style.cursor = 'grabbing';
     });
 
-    window.addEventListener("mousemove", (e) => {
-        if (!isPanning) return;
+    window.addEventListener('mousemove', (e) => {
+        if (!isInteractionActive) return;
 
-        const deltaX = e.clientX - startPoint.x;
-        const deltaY = e.clientY - startPoint.y;
+        const dxScreen = startPos.x - e.clientX;
+        const dyScreen = startPos.y - e.clientY;
+        dragDistance += Math.abs(dxScreen) + Math.abs(dyScreen);
 
-        if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+        if (dragDistance > 4) {
             window.hasDragged = true;
         }
 
-        const svgRect = svg.getBoundingClientRect();
-        const scaleX = viewBox.w / (svgRect.width || window.innerWidth);
-        const scaleY = viewBox.h / (svgRect.height || window.innerHeight);
-
-        viewBox.x -= deltaX * scaleX;
-        viewBox.y -= deltaY * scaleY;
-
-        updateViewBoxAndLOD(svg);
-        startPoint = { x: e.clientX, y: e.clientY };
+        if (svg && appContainer) {
+            const cw = appContainer.clientWidth || window.innerWidth;
+            const ch = appContainer.clientHeight || window.innerHeight;
+            viewBox.x += dxScreen * (viewBox.w / cw);
+            viewBox.y += dyScreen * (viewBox.h / ch);
+            svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+        }
+        startPos = { x: e.clientX, y: e.clientY };
     });
 
-    window.addEventListener("mouseup", () => {
-        if (isPanning) {
-            isPanning = false;
-            if (container) container.style.cursor = "grab";
-            document.body.style.cursor = "default";
-            // ドラッグ終了後、微小な遅延で hasDragged をリセット
-            setTimeout(() => { window.hasDragged = false; }, 80);
-        }
-    });
-
-    // --- 2. マウスホイール ＆ トラックパッド ズーム（常に確実に動作） ---
-    window.addEventListener("wheel", (e) => {
-        if (isUIElement(e.target)) return;
-        e.preventDefault();
-
-        // 左右スクロールがある場合（トラックパッドの2本指パン移動）
-        if (!e.ctrlKey && !e.metaKey && Math.abs(e.deltaX) > 0 && Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-            const svgRect = svg.getBoundingClientRect();
-            const scaleX = viewBox.w / (svgRect.width || window.innerWidth);
-            viewBox.x += e.deltaX * scaleX * 0.8;
-            updateViewBoxAndLOD(svg);
-            return;
-        }
-
-        // マウスホイール回転 または トラックパッドピンチ による拡大縮小
-        let delta = e.deltaY;
-        if (e.deltaMode === 1) delta *= 25; // 行単位スクロール
-        if (e.deltaMode === 2) delta *= 100; // ページ単位スクロール
-
-        let zoomFactor;
-        if (e.ctrlKey || e.metaKey) {
-            // トラックパッドのピンチ操作
-            zoomFactor = Math.exp(delta * 0.008);
-        } else {
-            // 物理マウスのホイール回転（上回転で拡大、下回転で縮小）
-            zoomFactor = delta > 0 ? 1.18 : 0.85;
-        }
-
-        applyZoom(zoomFactor, e.clientX, e.clientY);
-    }, { passive: false });
-
-    // --- 3. タッチデバイス ピンチ＆パン ---
-    let initialTouchDist = null;
-
-    window.addEventListener("touchstart", (e) => {
-        if (isUIElement(e.target)) return;
-
-        if (e.touches.length === 1) {
-            isPanning = true;
-            window.hasDragged = false;
-            startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        } else if (e.touches.length === 2) {
-            isPanning = false;
-            initialTouchDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-        }
-    }, { passive: true });
-
-    window.addEventListener("touchmove", (e) => {
-        if (isUIElement(e.target)) return;
-
-        if (e.touches.length === 1 && isPanning) {
-            const deltaX = e.touches[0].clientX - startPoint.x;
-            const deltaY = e.touches[0].clientY - startPoint.y;
-            const svgRect = svg.getBoundingClientRect();
-            const scaleX = viewBox.w / (svgRect.width || window.innerWidth);
-            const scaleY = viewBox.h / (svgRect.height || window.innerHeight);
-
-            viewBox.x -= deltaX * scaleX;
-            viewBox.y -= deltaY * scaleY;
-            updateViewBoxAndLOD(svg);
-            startPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        } else if (e.touches.length === 2 && initialTouchDist) {
-            const currentDist = Math.hypot(
-                e.touches[0].clientX - e.touches[1].clientX,
-                e.touches[0].clientY - e.touches[1].clientY
-            );
-            const factor = initialTouchDist / currentDist;
-            const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-            const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-            applyZoom(factor, midX, midY);
-            initialTouchDist = currentDist;
-        }
-    }, { passive: true });
-
-    window.addEventListener("touchend", () => {
-        isPanning = false;
-        initialTouchDist = null;
+    window.addEventListener('mouseup', () => {
+        isInteractionActive = false;
+        appContainer.style.cursor = 'grab';
         setTimeout(() => { window.hasDragged = false; }, 80);
-    }, { passive: true });
+    });
+
+    // --- 3. ダブルクリックによる観察記録追加 ---
+    window.addEventListener('dblclick', (e) => {
+        if (e.target.closest('#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, #annual-drawer, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay')) return;
+
+        if (!svg) return;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const ptM = pt.matrixTransform(svg.getScreenCTM().inverse());
+        const dx = ptM.x - cx, dy = ptM.y - cy;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // 円盤領域内のダブルクリック判定
+        if (distance < 50 || distance > 1050) return;
+
+        let angle = Math.atan2(dy, dx) * RAD_TO_DEG;
+        angle = (angle + 90 + 360) % 360;
+
+        const dayOfYear = Math.floor((angle / 360) * 365);
+        const year = window.currentAnnualDate ? window.currentAnnualDate.getFullYear() : 2026;
+        const targetDate = new Date(year, 0, dayOfYear + 1);
+
+        const y = targetDate.getFullYear();
+        const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+        const dt = String(targetDate.getDate()).padStart(2, '0');
+
+        if (typeof window.openUserEventModal === 'function') {
+            window.openUserEventModal(`${y}-${m}-${dt}`);
+        }
+    });
 }
 
-function applyZoom(zoomFactor, mouseX, mouseY) {
+function setupUIEventBlockers() {
+    function block(e) { e.stopPropagation(); }
+    const panels = ['#annual-nav-bar', '#annual-design-panel', '#annual-drawer', '#zoom-control-widget'];
+    panels.forEach(selector => {
+        const elem = document.querySelector(selector);
+        if (elem) {
+            elem.addEventListener('wheel', block);
+            elem.addEventListener('mousedown', block);
+        }
+    });
+}
+
+function applyZoomDirect(zoomFactor) {
     const svg = document.getElementById("annual-wheel-svg");
     if (!svg) return;
 
-    let newW = viewBox.w * zoomFactor;
-    let newH = viewBox.h * zoomFactor;
+    const newW = viewBox.w * zoomFactor;
+    const newH = viewBox.h * zoomFactor;
+    if (newW < MIN_VIEWBOX_W || newW > MAX_VIEWBOX_W) return;
 
-    if (newW < MIN_VIEWBOX_W) {
-        newW = MIN_VIEWBOX_W;
-        newH = MIN_VIEWBOX_W;
-    }
-    if (newW > MAX_VIEWBOX_W) {
-        newW = MAX_VIEWBOX_W;
-        newH = MAX_VIEWBOX_W;
-    }
+    const centerX = viewBox.x + viewBox.w / 2;
+    const centerY = viewBox.y + viewBox.h / 2;
 
-    const svgRect = svg.getBoundingClientRect();
-    const clientX = (mouseX !== undefined && mouseX !== null) ? mouseX : (svgRect.left + svgRect.width / 2);
-    const clientY = (mouseY !== undefined && mouseY !== null) ? mouseY : (svgRect.top + svgRect.height / 2);
-
-    // マウス位置を基準にviewBoxの原点を再計算（マウス位置がズレないズーム）
-    const ratioX = (clientX - svgRect.left) / (svgRect.width || 1);
-    const ratioY = (clientY - svgRect.top) / (svgRect.height || 1);
-
-    const svgX = viewBox.x + ratioX * viewBox.w;
-    const svgY = viewBox.y + ratioY * viewBox.h;
-
-    viewBox.x = svgX - ratioX * newW;
-    viewBox.y = svgY - ratioY * newH;
     viewBox.w = newW;
     viewBox.h = newH;
+    viewBox.x = centerX - newW / 2;
+    viewBox.y = centerY - newH / 2;
 
-    updateViewBoxAndLOD(svg);
+    svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+    updateLOD(svg);
 }
 
 function initZoomControls() {
@@ -273,40 +231,9 @@ function initZoomControls() {
 
     document.body.appendChild(widget);
 
-    document.getElementById("btn-zoom-in").onclick = () => applyZoom(0.7);
-    document.getElementById("btn-zoom-out").onclick = () => applyZoom(1.42);
+    document.getElementById("btn-zoom-in").onclick = () => applyZoomDirect(0.75);
+    document.getElementById("btn-zoom-out").onclick = () => applyZoomDirect(1.33);
     document.getElementById("btn-zoom-reset").onclick = () => window.resetAnnualView();
-}
-
-function setupWheelInteractions(svg) {
-    window.addEventListener("dblclick", (e) => {
-        if (e.target.closest("#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, #annual-drawer, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay")) return;
-
-        const pt = svg.createSVGPoint();
-        pt.x = e.clientX;
-        pt.y = e.clientY;
-        const ptM = pt.matrixTransform(svg.getScreenCTM().inverse());
-        const dx = ptM.x - cx, dy = ptM.y - cy;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        // 円盤領域内のダブルクリック判定
-        if (distance < 50 || distance > 1050) return;
-
-        let angle = Math.atan2(dy, dx) * RAD_TO_DEG;
-        angle = (angle + 90 + 360) % 360;
-
-        const dayOfYear = Math.floor((angle / 360) * 365);
-        const year = window.currentAnnualDate ? window.currentAnnualDate.getFullYear() : 2026;
-        const targetDate = new Date(year, 0, dayOfYear + 1);
-
-        const y = targetDate.getFullYear();
-        const m = String(targetDate.getMonth() + 1).padStart(2, '0');
-        const dt = String(targetDate.getDate()).padStart(2, '0');
-
-        if (typeof window.openUserEventModal === 'function') {
-            window.openUserEventModal(`${y}-${m}-${dt}`);
-        }
-    });
 }
 
 window.stepAnnualDate = function(days) {
@@ -330,8 +257,10 @@ window.resetToToday = function() {
 
 window.resetAnnualView = function() {
     viewBox = { x: 0, y: 0, w: 2000, h: 2000 };
+    window.viewBox = viewBox;
     const svg = document.getElementById("annual-wheel-svg");
-    updateViewBoxAndLOD(svg);
+    if (svg) svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+    updateLOD(svg);
 };
 
 document.addEventListener("DOMContentLoaded", initAnnualApp);
