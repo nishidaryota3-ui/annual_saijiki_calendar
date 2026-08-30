@@ -1,6 +1,6 @@
 /**
  * 年間歳時記・天体カレンダー メインオーケストレーター (Main Orchestrator)
- * V4カレンダーで実績のあるSVG座標変換マトリクス方式による完全パン＆ズーム
+ * V4（Polar Calendar）完全準拠 インタラクション
  */
 
 window.currentAnnualDate = new Date(2026, 7, 29); // 2026年 8月29日
@@ -14,8 +14,8 @@ let isInteractionActive = false;
 let startPos = { x: 0, y: 0 };
 let dragDistance = 0;
 
-const MIN_VIEWBOX_W = 35;   // 最大ズーム（約5700%・虫眼鏡モード）
-const MAX_VIEWBOX_W = 3600; // 最小ズーム（広域全景モード）
+const MIN_VIEWBOX_W = 35;   // 最大ズーム倍率（約5700%・ミクロ虫眼鏡モード）
+const MAX_VIEWBOX_W = 3600; // 最小ズーム倍率（広域全景モード）
 
 function updateLOD(svg) {
     if (!svg) svg = document.getElementById("annual-wheel-svg");
@@ -58,52 +58,56 @@ function initAnnualApp() {
     drawAnnualClockHands(window.currentAnnualDate);
     updateAnnualNavDisplay(window.currentAnnualDate);
 
-    // V4実績ベースのパン＆ズーム初期化
-    initInteractions();
-
-    // UIパネルへのイベントバブリング防止
-    setupUIEventBlockers();
+    // V4完全準拠のパン＆ズーム初期化
+    initV4Interactions();
 }
 
-function initInteractions() {
-    const appContainer = document.getElementById("canvas-container") || document.body;
+/**
+ * V4（Polar Calendar）と100%同一のインタラクション実装
+ */
+function initV4Interactions() {
+    const appContainer = document.body;
     const svg = document.getElementById("annual-wheel-svg");
+    window.svg = svg;
 
-    // --- 1. ホイールズーム (V4と全く同一のSVGマトリクス計算) ---
+    // --- 1. マウスポインタ位置を中心としたホイールズーム (V4完全同一コード) ---
     appContainer.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        if (!svg) return;
+        // UIパネルやモーダル上のスクロールは通す
+        if (e.target.closest('#annual-drawer, #annual-design-panel, #saijiki-modal-card, #print-export-modal, #annual-user-event-overlay')) return;
 
-        // ホイールの回転方向に応じて拡大・縮小
+        e.preventDefault();
         const zoomFactor = e.deltaY > 0 ? 1.08 : 0.92;
+        if (typeof svg === 'undefined' || !svg) return;
+
         const newW = viewBox.w * zoomFactor;
         const newH = viewBox.h * zoomFactor;
-
         if (newW < MIN_VIEWBOX_W || newW > MAX_VIEWBOX_W) return;
 
         const pt = svg.createSVGPoint();
         pt.x = e.clientX;
         pt.y = e.clientY;
         const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
-
+        
         viewBox.w = newW;
         viewBox.h = newH;
         viewBox.x = svgP.x - (svgP.x - viewBox.x) * zoomFactor;
         viewBox.y = svgP.y - (svgP.y - viewBox.y) * zoomFactor;
-
+        
         svg.setAttribute('viewBox', `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
         updateLOD(svg);
     }, { passive: false });
 
-    // --- 2. マウスドラッグによるパン (V4と全く同一の実装) ---
+    // --- 2. どこでもドラッグでパン移動 (V4完全同一コード) ---
     appContainer.addEventListener('mousedown', (e) => {
-        if (e.target.closest('#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, #annual-drawer, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay')) return;
-        
+        if (e.target.closest('#annual-nav-bar, #annual-drawer, #annual-design-panel, #saijiki-modal-card, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay')) return;
+
         dragDistance = 0;
         isInteractionActive = true;
         window.hasDragged = false;
         startPos = { x: e.clientX, y: e.clientY };
-        appContainer.style.cursor = 'grabbing';
+
+        const cursorTarget = document.getElementById('canvas-container') || document.body;
+        cursorTarget.style.cursor = 'grabbing';
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -113,11 +117,11 @@ function initInteractions() {
         const dyScreen = startPos.y - e.clientY;
         dragDistance += Math.abs(dxScreen) + Math.abs(dyScreen);
 
-        if (dragDistance > 4) {
+        if (dragDistance > 5) {
             window.hasDragged = true;
         }
 
-        if (svg && appContainer) {
+        if (typeof viewBox !== 'undefined' && appContainer && typeof svg !== 'undefined' && svg) {
             const cw = appContainer.clientWidth || window.innerWidth;
             const ch = appContainer.clientHeight || window.innerHeight;
             viewBox.x += dxScreen * (viewBox.w / cw);
@@ -129,15 +133,16 @@ function initInteractions() {
 
     window.addEventListener('mouseup', () => {
         isInteractionActive = false;
-        appContainer.style.cursor = 'grab';
+        const cursorTarget = document.getElementById('canvas-container') || document.body;
+        cursorTarget.style.cursor = 'grab';
         setTimeout(() => { window.hasDragged = false; }, 80);
     });
 
     // --- 3. ダブルクリックによる観察記録追加 ---
     window.addEventListener('dblclick', (e) => {
-        if (e.target.closest('#annual-nav-bar, #annual-design-panel, #saijiki-modal-card, #annual-drawer, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay')) return;
+        if (e.target.closest('#annual-nav-bar, #annual-drawer, #annual-design-panel, #saijiki-modal-card, #zoom-control-widget, #print-export-modal, #annual-user-event-overlay')) return;
 
-        if (!svg) return;
+        if (typeof svg === 'undefined' || !svg) return;
         const pt = svg.createSVGPoint();
         pt.x = e.clientX;
         pt.y = e.clientY;
@@ -161,18 +166,6 @@ function initInteractions() {
 
         if (typeof window.openUserEventModal === 'function') {
             window.openUserEventModal(`${y}-${m}-${dt}`);
-        }
-    });
-}
-
-function setupUIEventBlockers() {
-    function block(e) { e.stopPropagation(); }
-    const panels = ['#annual-nav-bar', '#annual-design-panel', '#annual-drawer', '#zoom-control-widget'];
-    panels.forEach(selector => {
-        const elem = document.querySelector(selector);
-        if (elem) {
-            elem.addEventListener('wheel', block);
-            elem.addEventListener('mousedown', block);
         }
     });
 }
