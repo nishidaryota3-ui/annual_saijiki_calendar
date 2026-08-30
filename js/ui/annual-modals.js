@@ -71,7 +71,7 @@
     saijikiOverlay.onclick = (e) => { if (e.target === saijikiOverlay) saijikiOverlay.style.display = 'none'; };
 
     window.openKouDetailModal = function(kou) {
-        if (!kou) return;
+        if (!kou || window.hasDragged) return;
         document.getElementById('sm-season-badge').innerText = `${kou.season} ｜ ${kou.sekki}・第${kou.id}候`;
         document.getElementById('sm-title').innerText = kou.name;
         document.getElementById('sm-reading').innerText = kou.reading;
@@ -121,7 +121,7 @@
     };
 
     window.openSaijikiDetailModal = function(term) {
-        if (!term) return;
+        if (!term || window.hasDragged) return;
         document.getElementById('sm-season-badge').innerText = `${term.season} ｜ 二十四節気`;
         document.getElementById('sm-title').innerText = term.name;
         document.getElementById('sm-reading').innerText = `${term.reading} （太陽黄経 ${term.solarLong}°）`;
